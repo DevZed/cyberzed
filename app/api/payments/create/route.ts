@@ -25,13 +25,15 @@ export async function POST(request: Request) {
     // Fetch order details
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select(`
+      .select(
+        `
         *,
         order_items (
           *,
           products (*)
         )
-      `)
+      `
+      )
       .eq('id', order_id)
       .single();
 
@@ -53,7 +55,7 @@ export async function POST(request: Request) {
 
     // Create payment based on method
     switch (payment_method) {
-      case PAYMENT_METHODS.STRIPE:
+      case PAYMENT_METHODS.STRIPE: {
         const stripeSession = await createStripeCheckoutSession(
           order_id,
           order.customer_email,
@@ -65,20 +67,27 @@ export async function POST(request: Request) {
           session_id: stripeSession.sessionId,
         };
         break;
+      }
 
-      case PAYMENT_METHODS.PAYPAL:
+      case PAYMENT_METHODS.PAYPAL: {
         const paypalOrder = await createPayPalOrder(
           order_id,
           items,
           order.total_amount
         );
+
+        const links: any[] = paypalOrder.links || [];
+        const approveLink = links.find((link) => link.rel === 'approve');
+        const approveUrl = approveLink ? approveLink.href : links[0]?.href;
+
         paymentData = {
-          payment_url: paypalOrder.approveUrl,
+          payment_url: approveUrl,
           paypal_order_id: paypalOrder.orderId,
         };
         break;
+      }
 
-      case PAYMENT_METHODS.SHOPPY:
+      case PAYMENT_METHODS.SHOPPY: {
         const shoppyOrder = await createShoppyOrder(
           order_id,
           order.customer_email,
@@ -90,6 +99,7 @@ export async function POST(request: Request) {
           shoppy_order_id: shoppyOrder.shoppyOrderId,
         };
         break;
+      }
 
       default:
         return NextResponse.json(
